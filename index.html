@@ -1,0 +1,139 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Renewly | Subscription Radar</title>
+  <style>
+    :root { color-scheme: light; --bg: oklch(97% .01 220); --panel: oklch(99% .006 220); --line: oklch(87% .018 220); --ink: oklch(23% .025 235); --muted: oklch(50% .035 235); --accent: oklch(48% .16 255); --soft: oklch(94% .035 255); --bad: oklch(55% .18 28); --good: oklch(49% .14 150); }
+    * { box-sizing: border-box; }
+    body { margin: 0; font: 14px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif; background: var(--bg); color: var(--ink); }
+    main { width: min(1180px, calc(100% - 32px)); margin: 28px auto 40px; }
+    header { display: flex; justify-content: space-between; gap: 18px; align-items: flex-start; margin-bottom: 22px; }
+    h1 { margin: 0 0 6px; font-size: 28px; letter-spacing: 0; }
+    p { margin: 0; color: var(--muted); }
+    button, input, select { font: inherit; border-radius: 8px; }
+    button { border: 1px solid var(--line); background: var(--panel); color: var(--ink); padding: 9px 12px; cursor: pointer; }
+    button.primary { background: var(--accent); color: oklch(98% .01 255); border-color: var(--accent); }
+    button.danger { color: var(--bad); }
+    .actions { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+    .grid { display: grid; grid-template-columns: 340px 1fr; gap: 18px; align-items: start; }
+    section, form { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 16px; }
+    label { display: grid; gap: 6px; color: var(--muted); font-size: 12px; font-weight: 650; }
+    input, select { width: 100%; border: 1px solid var(--line); background: oklch(100% .004 220); color: var(--ink); padding: 10px; }
+    form { display: grid; gap: 12px; }
+    .row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .stats { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 10px; margin-bottom: 14px; }
+    .stat { background: var(--soft); border-radius: 8px; padding: 12px; }
+    .stat b { display: block; font-size: 21px; margin-bottom: 2px; }
+    .toolbar { display: flex; gap: 10px; margin-bottom: 12px; }
+    .toolbar input, .toolbar select { max-width: 220px; }
+    .list { display: grid; gap: 10px; }
+    .item { border: 1px solid var(--line); border-radius: 8px; padding: 12px; display: grid; gap: 8px; }
+    .top { display: flex; justify-content: space-between; gap: 10px; }
+    .name { font-weight: 750; font-size: 16px; }
+    .meta { color: var(--muted); display: flex; gap: 12px; flex-wrap: wrap; }
+    .pill { width: fit-content; border-radius: 999px; padding: 4px 8px; background: var(--soft); color: var(--accent); font-size: 12px; font-weight: 700; }
+    .soon { color: var(--bad); }
+    .empty { color: var(--muted); border: 1px dashed var(--line); border-radius: 8px; padding: 22px; text-align: center; }
+    @media (max-width: 760px) { main { width: min(100% - 20px, 1180px); margin-top: 18px; } header, .grid, .row { grid-template-columns: 1fr; display: grid; } .stats { grid-template-columns: 1fr; } .toolbar { display: grid; } .toolbar input, .toolbar select { max-width: none; } }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <div>
+        <h1>Renewly</h1>
+        <p>Track subscriptions, annualized costs, and renewals before surprise charges land.</p>
+      </div>
+      <div class="actions">
+        <button id="exportBtn">Export</button>
+        <button id="importBtn">Import</button>
+        <input id="importFile" type="file" accept="application/json" hidden>
+      </div>
+    </header>
+    <div class="grid">
+      <form id="subForm">
+        <h2>Add subscription</h2>
+        <label>Name <input name="name" required placeholder="Adobe, iCloud, Notion"></label>
+        <div class="row">
+          <label>Cost <input name="cost" type="number" min="0" step="0.01" required placeholder="12.99"></label>
+          <label>Cycle <select name="cycle"><option>Monthly</option><option>Yearly</option><option>Weekly</option><option>Quarterly</option></select></label>
+        </div>
+        <div class="row">
+          <label>Next renewal <input name="next" type="date" required></label>
+          <label>Category <input name="category" placeholder="Work, home, media"></label>
+        </div>
+        <label>Owner or note <input name="note" placeholder="Shared with family, cancel after trial"></label>
+        <button class="primary">Save subscription</button>
+      </form>
+      <section>
+        <div class="stats" id="stats"></div>
+        <div class="toolbar">
+          <input id="search" placeholder="Search subscriptions">
+          <select id="filter"><option value="all">All</option><option value="soon">Due in 30 days</option><option value="active">Active</option><option value="cancelled">Cancelled</option></select>
+        </div>
+        <div class="list" id="list"></div>
+      </section>
+    </div>
+  </main>
+  <script>
+    const key = "renewly:v1";
+    const form = document.querySelector("#subForm");
+    const list = document.querySelector("#list");
+    const stats = document.querySelector("#stats");
+    const search = document.querySelector("#search");
+    const filter = document.querySelector("#filter");
+    const importFile = document.querySelector("#importFile");
+    const sample = [
+      { id: crypto.randomUUID(), name: "Design Suite", cost: 54.99, cycle: "Monthly", next: addDays(12), category: "Work", note: "Ask if annual plan is cheaper", cancelled: false },
+      { id: crypto.randomUUID(), name: "Cloud Backup", cost: 99, cycle: "Yearly", next: addDays(42), category: "Home", note: "Family photos", cancelled: false }
+    ];
+    let subs = JSON.parse(localStorage.getItem(key) || "null") || sample;
+    function addDays(days) { const d = new Date(); d.setDate(d.getDate() + days); return d.toISOString().slice(0, 10); }
+    function save() { localStorage.setItem(key, JSON.stringify(subs)); render(); }
+    function annual(s) { return Number(s.cost) * ({ Weekly: 52, Monthly: 12, Quarterly: 4, Yearly: 1 }[s.cycle] || 12); }
+    function daysUntil(date) { return Math.ceil((new Date(date) - new Date(new Date().toDateString())) / 86400000); }
+    function money(n) { return n.toLocaleString(undefined, { style: "currency", currency: "USD" }); }
+    form.next.value = addDays(30);
+    form.addEventListener("submit", event => {
+      event.preventDefault();
+      const data = Object.fromEntries(new FormData(form));
+      subs.push({ id: crypto.randomUUID(), ...data, cost: Number(data.cost), cancelled: false });
+      form.reset(); form.next.value = addDays(30); save();
+    });
+    search.addEventListener("input", render); filter.addEventListener("change", render);
+    document.querySelector("#exportBtn").onclick = () => download("renewly-data.json", JSON.stringify(subs, null, 2));
+    document.querySelector("#importBtn").onclick = () => importFile.click();
+    importFile.onchange = async () => { subs = JSON.parse(await importFile.files[0].text()); save(); };
+    function download(name, text) { const a = Object.assign(document.createElement("a"), { href: URL.createObjectURL(new Blob([text], { type: "application/json" })), download: name }); a.click(); URL.revokeObjectURL(a.href); }
+    function render() {
+      const active = subs.filter(s => !s.cancelled);
+      const soon = active.filter(s => daysUntil(s.next) <= 30);
+      stats.innerHTML = [
+        ["Monthly run-rate", money(active.reduce((t, s) => t + annual(s) / 12, 0))],
+        ["Annual exposure", money(active.reduce((t, s) => t + annual(s), 0))],
+        ["Due in 30 days", soon.length]
+      ].map(([label, value]) => `<div class="stat"><b>${value}</b><span>${label}</span></div>`).join("");
+      const q = search.value.toLowerCase();
+      const rows = subs.filter(s => (`${s.name} ${s.category} ${s.note}`).toLowerCase().includes(q)).filter(s => {
+        if (filter.value === "soon") return !s.cancelled && daysUntil(s.next) <= 30;
+        if (filter.value === "active") return !s.cancelled;
+        if (filter.value === "cancelled") return s.cancelled;
+        return true;
+      }).sort((a, b) => new Date(a.next) - new Date(b.next));
+      list.innerHTML = rows.length ? rows.map(s => {
+        const days = daysUntil(s.next);
+        return `<article class="item">
+          <div class="top"><div><div class="name">${s.name}</div><div class="meta"><span>${money(Number(s.cost))} ${s.cycle.toLowerCase()}</span><span>${money(annual(s))}/yr</span><span class="${days <= 14 && !s.cancelled ? "soon" : ""}">${days < 0 ? Math.abs(days) + " days overdue" : "renews in " + days + " days"}</span></div></div><span class="pill">${s.cancelled ? "Cancelled" : s.category || "Unsorted"}</span></div>
+          <div class="meta">${s.note || "No note"}</div>
+          <div class="actions"><button onclick="toggleSub('${s.id}')">${s.cancelled ? "Restore" : "Cancel"}</button><button class="danger" onclick="deleteSub('${s.id}')">Delete</button></div>
+        </article>`;
+      }).join("") : `<div class="empty">No matching subscriptions. Add one on the left to start watching your renewals.</div>`;
+    }
+    window.toggleSub = id => { subs = subs.map(s => s.id === id ? { ...s, cancelled: !s.cancelled } : s); save(); };
+    window.deleteSub = id => { subs = subs.filter(s => s.id !== id); save(); };
+    render();
+  </script>
+</body>
+</html>
